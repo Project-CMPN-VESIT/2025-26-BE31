@@ -15,7 +15,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   firebaseUser: null,
   loading: true,
-  refreshUser: async () => {},
+  refreshUser: async () => { },
 });
 
 /**
@@ -55,17 +55,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Listen to auth state changes
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setFirebaseUser(firebaseUser);
-      
-      if (firebaseUser) {
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
         // Fetch user profile from Firestore
-        const profile = await fetchUserProfile(firebaseUser.uid);
+        const profile = await fetchUserProfile(fbUser.uid);
+        // Batch state updates to prevent intermediate navigation states
+        setFirebaseUser(fbUser);
         setUser(profile);
       } else {
+        setFirebaseUser(null);
         setUser(null);
       }
-      
       setLoading(false);
     });
 

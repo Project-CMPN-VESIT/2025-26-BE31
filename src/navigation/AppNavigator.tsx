@@ -24,39 +24,57 @@ import MainNavigator from './MainNavigator';
 
 const Stack = createNativeStackNavigator();
 
+function ProfileLoadingScreen() {
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+      <ActivityIndicator size="large" color="#10b981" />
+    </View>
+  );
+}
+
 /**
  * AppNavigator Component
  * Root navigation with authentication flow
  */
 export default function AppNavigator() {
-  const { firebaseUser, loading } = useAuth();
+  const { firebaseUser, user, loading } = useAuth();
 
-  // Show loading screen while auth state is being determined
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+      <View style={{
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#fff'
+      }}>
         <ActivityIndicator size="large" color="#10b981" />
       </View>
     );
   }
 
   return (
-    <NavigationContainer>
-      <View style={{ flex: 1 }}>
+    <>
+      <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {firebaseUser ? (
-            // User is signed in
-            <Stack.Screen name="Main" component={MainNavigator} />
+            user ? (
+              <Stack.Screen name="Main" component={MainNavigator} />
+            ) : (
+              <Stack.Screen
+                name="ProfileLoading"
+                component={ProfileLoadingScreen}
+              />
+            )
           ) : (
-            // User is not signed in
-            <>
+            <Stack.Group>
               <Stack.Screen name="Login" component={LoginScreen} />
               <Stack.Screen name="Register" component={RegisterScreen} />
-            </>
+            </Stack.Group>
           )}
         </Stack.Navigator>
-        <ToastComponent config={toastConfig} />
-      </View>
-    </NavigationContainer>
+      </NavigationContainer>
+
+      <ToastComponent config={toastConfig} />
+    </>
   );
 }

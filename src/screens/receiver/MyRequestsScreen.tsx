@@ -104,10 +104,10 @@ export default function MyRequestsScreen({ navigation }: any) {
       <View className="flex-row justify-between items-start mb-4">
         <View className="flex-1 mr-4">
           <Text className="text-lg font-bold text-secondary-900 mb-1" numberOfLines={1}>
-            {item.medicineName}
+            {item.title}
           </Text>
           <Text className="text-sm text-secondary-500 font-medium">
-            Quantity: {item.quantity} units
+            Quantity: {item.quantityNeeded} units
           </Text>
         </View>
         <View className={`px-3 py-1.5 rounded-full border ${getStatusColor(item.status)}`}>

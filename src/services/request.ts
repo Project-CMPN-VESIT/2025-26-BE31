@@ -25,6 +25,8 @@ export const createRequest = async (requestData: {
   quantityNeeded: number;
   ngoName?: string;
   geo?: Location;
+  urgency?: 'low' | 'medium' | 'high';
+  reason?: string;
 }): Promise<string> => {
   const currentUser = auth.currentUser;
   if (!currentUser) {
@@ -121,7 +123,7 @@ export const searchRequests = async (searchTerm: string): Promise<MedicineReques
   );
   const querySnapshot = await getDocs(q);
   const requests = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as MedicineRequest));
-  
+
   // Client-side filtering
   return requests.filter(request =>
     request.title.toLowerCase().includes(searchTerm.toLowerCase())

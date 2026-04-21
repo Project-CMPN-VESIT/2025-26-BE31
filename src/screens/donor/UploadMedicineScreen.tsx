@@ -13,28 +13,36 @@ import * as ImagePicker from "expo-image-picker";
 import Toast from "react-native-toast-message";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { addDoc, collection, serverTimestamp, Timestamp } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  serverTimestamp,
+  Timestamp,
+} from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
-// Your services
 import { db, storage } from "../../services/firebase";
 import { useAuth } from "../../context/AuthContext";
 import { getCurrentLocation, LocationCoords } from "../../services/location";
 import { extractMedicineDetails } from "../../services/medicineExtraction";
 
-// Type-safe navigation
-import { useNavigation } from "@react-navigation/native";
+import {
+  useNavigation,
+  NavigationProp,
+} from "@react-navigation/native";
+
+type RootStackParamList = {
+  Main: undefined;
+};
 
 export default function UploadMedicineScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
-  // Images
   const [frontImageUri, setFrontImageUri] = useState<string | null>(null);
   const [labelImageUri, setLabelImageUri] = useState<string | null>(null);
 
-  // Form Fields
   const [medicineName, setMedicineName] = useState("");
   const [category, setCategory] = useState("");
   const [manufacturer, setManufacturer] = useState("");
@@ -45,13 +53,11 @@ export default function UploadMedicineScreen() {
   const [description, setDescription] = useState("");
   const [quantity, setQuantity] = useState("");
 
-  // System
   const [extracting, setExtracting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [location, setLocation] = useState<LocationCoords | null>(null);
-  const [isScanned, setIsScanned] = useState(false);
+  const [extractedData, setExtractedData] = useState<any>(null);
 
-  // Fetch location
   useEffect(() => {
     (async () => {
       const loc = await getCurrentLocation();
@@ -59,56 +65,48 @@ export default function UploadMedicineScreen() {
     })();
   }, []);
 
-  // Pick image (camera or gallery)
-  const pickImage = async (type: "front" | "label", useCamera: boolean = false) => {
-    // Request permissions
-    if (useCamera) {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
+  const pickImage = async (
+    type: "front" | "label",
+    useCamera: boolean = false
+  ) => {
+    try {
+      const permission = useCamera
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (permission.status !== "granted") {
         Toast.show({
-          type: 'error',
-          text1: 'Permission Denied',
-          text2: 'Camera access is required to take photos of medicine labels.',
+          type: "error",
+          text1: "Permission Denied",
         });
         return;
       }
-    } else {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Toast.show({
-          type: 'error',
-          text1: 'Permission Denied',
-          text2: 'Photo gallery access is required to upload medicine images.',
+
+      const result = useCamera
+        ? await ImagePicker.launchCameraAsync({
+          allowsEditing: true,
+          quality: 0.8,
+        })
+        : await ImagePicker.launchImageLibraryAsync({
+          allowsEditing: true,
+          quality: 0.8,
         });
-        return;
+
+      if (!result.canceled && result.assets?.length > 0) {
+        const uri = result.assets[0].uri;
+        if (type === "front") setFrontImageUri(uri);
+        else setLabelImageUri(uri);
       }
-    }
-
-    const result = useCamera
-      ? await ImagePicker.launchCameraAsync({
-        mediaTypes: "images",
-        allowsEditing: true,
-        quality: 0.8,
-      })
-      : await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: "images",
-        allowsEditing: true,
-        quality: 0.8,
-      });
-
-    if (!result.canceled && result.assets[0]) {
-      if (type === "front") setFrontImageUri(result.assets[0].uri);
-      else setLabelImageUri(result.assets[0].uri);
+    } catch (err) {
+      console.error(err);
     }
   };
 
-  // OCR using your existing Gemini service
   const runOCR = async () => {
     if (!frontImageUri) {
       Toast.show({
         type: "error",
-        text1: "Missing Image",
-        text2: "Please upload the front image",
+        text1: "Please upload front image",
       });
       return;
     }
@@ -116,52 +114,60 @@ export default function UploadMedicineScreen() {
     setExtracting(true);
 
     try {
-      Toast.show({
-        type: "info",
-        text1: "Extracting Details",
-        text2: "Please wait while we scan the medicine...",
-      });
+      const extractedData = await extractMedicineDetails(
+        frontImageUri,
+        labelImageUri || undefined
+      );
 
-      // Use your existing extractMedicineDetails function
-      const extractedData = await extractMedicineDetails(frontImageUri, labelImageUri || undefined);
-
-      // Autofill with original field names
-      if (extractedData.name) setMedicineName(extractedData.name);
-      if (extractedData.manufacturer) setManufacturer(extractedData.manufacturer);
-      if (extractedData.batchNo) setBatchNo(extractedData.batchNo);
-      if (extractedData.mfdDate) setMfgDate(extractedData.mfdDate);
-      if (extractedData.expiryDate) {
+      if (extractedData?.name) setMedicineName(extractedData.name);
+      if (extractedData?.manufacturer)
+        setManufacturer(extractedData.manufacturer);
+      if (extractedData?.batchNo) setBatchNo(extractedData.batchNo);
+      if (extractedData?.mfdDate) setMfgDate(extractedData.mfdDate);
+      if (extractedData?.expiryDate) {
         setExpiryDate(extractedData.expiryDate);
-        setIsScanned(true); // Disable editing after scan
       }
-      if (extractedData.mrp) setMrp(extractedData.mrp.toString());
-      if (extractedData.type) setCategory(extractedData.type);
+
+      // Store extracted data for display
+      setExtractedData(extractedData);
+      if (extractedData?.mrp)
+        setMrp(String(extractedData.mrp));
+      if (extractedData?.type) setCategory(extractedData.type);
 
       Toast.show({
         type: "success",
         text1: "Details Extracted",
-        text2: "Review before submitting"
       });
-
     } catch (e) {
-      console.error(e);
       Toast.show({
         type: "error",
         text1: "OCR Failed",
-        text2: "Please fill manually.",
       });
     }
 
     setExtracting(false);
   };
 
-  // Upload to Firebase
   const uploadToFirebase = async () => {
-    if (!medicineName || !batchNo || !manufacturer || !quantity || !expiryDate || !category) {
+    if (
+      !medicineName ||
+      !batchNo ||
+      !manufacturer ||
+      !quantity ||
+      !expiryDate ||
+      !category
+    ) {
       Toast.show({
         type: "error",
-        text1: "Missing fields",
-        text2: "Please fill all required fields including category"
+        text1: "Fill all required fields",
+      });
+      return;
+    }
+
+    if (!user?.uid) {
+      Toast.show({
+        type: "error",
+        text1: "User not authenticated",
       });
       return;
     }
@@ -173,40 +179,45 @@ export default function UploadMedicineScreen() {
 
       const uploadImage = async (uri: string, name: string) => {
         const blob = await (await fetch(uri)).blob();
-        const storageRef = ref(storage, `donations/${user?.uid}/${Date.now()}_${name}.jpg`);
+        const storageRef = ref(
+          storage,
+          `donations/${user.uid}/${Date.now()}_${name}.jpg`
+        );
         await uploadBytes(storageRef, blob);
         return await getDownloadURL(storageRef);
       };
 
-      if (frontImageUri) urls.push(await uploadImage(frontImageUri, "front"));
-      if (labelImageUri) urls.push(await uploadImage(labelImageUri, "label"));
+      if (frontImageUri)
+        urls.push(await uploadImage(frontImageUri, "front"));
+      if (labelImageUri)
+        urls.push(await uploadImage(labelImageUri, "label"));
 
-      // convert expiry to timestamp
       const [mm, yyyy] = expiryDate.split("/");
-      const expiryTS = Timestamp.fromDate(new Date(Number(yyyy), Number(mm) - 1));
 
-      const payload = {
-        title: medicineName, // Changed from 'name' to 'title' per Firestore rules
-        description: description || "Medicine donation", // Required per rules
-        category, // Required per rules
+      if (!mm || !yyyy) {
+        throw new Error("Invalid expiry format");
+      }
+
+      const expiryTS = Timestamp.fromDate(
+        new Date(Number(yyyy), Number(mm) - 1)
+      );
+
+      await addDoc(collection(db, "donations"), {
+        title: medicineName,
+        description: description || "Medicine donation",
+        category,
         quantity: Number(quantity),
         batchNo,
         manufacturer,
         mfgDate: mfgDate || null,
         expiryDate: expiryTS,
-        mrp: mrp || null,
+        mrp: mrp ? Number(mrp) : null,
         photos: urls,
-        donorId: user?.uid,
-        donorName: user?.name || user?.email, // Changed from displayName to name
+        donorId: user.uid,
+        donorName: user.name || user.email,
         createdAt: serverTimestamp(),
-        location: location ? {
-          lat: location.lat,
-          lng: location.lng,
-          address: location.address || ""
-        } : null
-      };
-
-      await addDoc(collection(db, "donations"), payload);
+        location: location || null,
+      });
 
       Toast.show({
         type: "success",
@@ -214,7 +225,6 @@ export default function UploadMedicineScreen() {
       });
 
       navigation.goBack();
-
     } catch (err) {
       console.error(err);
       Toast.show({
@@ -227,209 +237,323 @@ export default function UploadMedicineScreen() {
   };
 
   return (
-    <View className="flex-1 bg-gray-50">
-
-      {/* Header */}
+    <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
       <LinearGradient
-        colors={['#0f766e', '#14b8a6']}
-        style={{ paddingTop: insets.top + 20, paddingBottom: 30 }}
+        colors={["#0f766e", "#14b8a6"]}
+        style={{
+          paddingTop: insets.top + 20,
+          paddingBottom: 30,
+          paddingHorizontal: 20,
+        }}
       >
-        <View className="flex-row items-center px-5">
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            className="w-10 h-10 bg-white/20 rounded-full items-center justify-center mr-4"
-          >
-            <Ionicons name="arrow-back" color="#fff" size={22} />
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" color="#fff" size={24} />
           </TouchableOpacity>
-          <Text className="text-2xl font-bold text-white">Upload Medicine</Text>
+          <Text
+            style={{
+              color: "white",
+              fontSize: 22,
+              fontWeight: "bold",
+              marginLeft: 15,
+            }}
+          >
+            Upload Medicine
+          </Text>
         </View>
       </LinearGradient>
 
-      <ScrollView className="px-5 mt-4">
+      <ScrollView style={{ padding: 20 }}>
+        {/* Image Upload Section */}
+        <View style={{ marginBottom: 20 }}>
+          <Text style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 10, color: '#374151' }}>
+            Medicine Photos
+          </Text>
 
-        {/* IMAGES */}
-        <View className="bg-white p-5 rounded-2xl mb-6 shadow">
-          <Text className="font-bold mb-3">📸 Medicine Images</Text>
-
-          {/* Front */}
-          <View className="mb-4">
-            <Text className="text-sm font-medium text-gray-600 mb-2">
-              Front Photo (Medicine Name & Brand) *
-            </Text>
+          {/* Front Image */}
+          <View style={{ marginBottom: 15 }}>
+            <Text style={{ marginBottom: 8, color: '#6b7280' }}>Front Packaging Photo *</Text>
             {frontImageUri ? (
-              <View className="relative">
-                <Image source={{ uri: frontImageUri }} className="h-48 w-full rounded-xl" />
+              <View style={{ position: 'relative' }}>
+                <Image
+                  source={{ uri: frontImageUri }}
+                  style={{ width: '100%', height: 200, borderRadius: 8 }}
+                />
                 <TouchableOpacity
-                  className="absolute top-2 right-2 bg-red-500 rounded-full p-2"
                   onPress={() => setFrontImageUri(null)}
+                  style={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    backgroundColor: '#ef4444',
+                    borderRadius: 15,
+                    width: 30,
+                    height: 30,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
                 >
-                  <Ionicons name="close" size={16} color="white" />
+                  <Ionicons name="close" size={18} color="#fff" />
                 </TouchableOpacity>
               </View>
             ) : (
-              <View className="flex-row gap-3">
+              <View style={{ flexDirection: 'row', gap: 10 }}>
                 <TouchableOpacity
-                  className="flex-1 rounded-xl bg-primary-50 border border-primary-300 p-4"
-                  onPress={() => pickImage("front", true)}
+                  onPress={() => pickImage('front', true)}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#0d9488',
+                    padding: 15,
+                    borderRadius: 8,
+                    alignItems: 'center',
+                    flexDirection: 'row',
+                    justifyContent: 'center',
+                    gap: 8,
+                  }}
                 >
-                  <View className="items-center">
-                    <Ionicons name="camera" size={24} color="#0d9488" />
-                    <Text className="text-primary-700 mt-1">Camera</Text>
-                  </View>
+                  <Ionicons name="camera" size={20} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: '600' }}>Camera</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  className="flex-1 rounded-xl bg-primary-50 border border-primary-300 p-4"
-                  onPress={() => pickImage("front", false)}
+                  onPress={() => pickImage('front', false)}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#f3f4f6',
+                    padding: 15,
+                    borderRadius: 8,
+                    alignItems: 'center',
+                    flexDirection: 'row',
+                    justifyContent: 'center',
+                    gap: 8,
+                    borderWidth: 1,
+                    borderColor: '#0d9488',
+                  }}
                 >
-                  <View className="items-center">
-                    <Ionicons name="images" size={24} color="#0d9488" />
-                    <Text className="text-primary-700 mt-1">Gallery</Text>
-                  </View>
+                  <Ionicons name="images" size={20} color="#0d9488" />
+                  <Text style={{ color: '#0d9488', fontWeight: '600' }}>Gallery</Text>
                 </TouchableOpacity>
               </View>
             )}
           </View>
 
-          {/* Label */}
-          <View className="mb-4">
-            <Text className="text-sm font-medium text-gray-600 mb-2">
-              Label Photo (Batch, MFG, EXP, MRP) - Optional
-            </Text>
+          {/* Label Image */}
+          <View style={{ marginBottom: 15 }}>
+            <Text style={{ marginBottom: 8, color: '#6b7280' }}>Label Details Photo (Optional)</Text>
             {labelImageUri ? (
-              <View className="relative">
-                <Image source={{ uri: labelImageUri }} className="h-48 w-full rounded-xl" />
+              <View style={{ position: 'relative' }}>
+                <Image
+                  source={{ uri: labelImageUri }}
+                  style={{ width: '100%', height: 200, borderRadius: 8 }}
+                />
                 <TouchableOpacity
-                  className="absolute top-2 right-2 bg-red-500 rounded-full p-2"
                   onPress={() => setLabelImageUri(null)}
+                  style={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    backgroundColor: '#ef4444',
+                    borderRadius: 15,
+                    width: 30,
+                    height: 30,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
                 >
-                  <Ionicons name="close" size={16} color="white" />
+                  <Ionicons name="close" size={18} color="#fff" />
                 </TouchableOpacity>
               </View>
             ) : (
-              <View className="flex-row gap-3">
+              <View style={{ flexDirection: 'row', gap: 10 }}>
                 <TouchableOpacity
-                  className="flex-1 rounded-xl bg-emerald-50 border border-emerald-300 p-4"
-                  onPress={() => pickImage("label", true)}
+                  onPress={() => pickImage('label', true)}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#0d9488',
+                    padding: 15,
+                    borderRadius: 8,
+                    alignItems: 'center',
+                    flexDirection: 'row',
+                    justifyContent: 'center',
+                    gap: 8,
+                  }}
                 >
-                  <View className="items-center">
-                    <Ionicons name="camera" size={24} color="#059669" />
-                    <Text className="text-emerald-700 mt-1">Camera</Text>
-                  </View>
+                  <Ionicons name="camera" size={20} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: '600' }}>Camera</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  className="flex-1 rounded-xl bg-emerald-50 border border-emerald-300 p-4"
-                  onPress={() => pickImage("label", false)}
+                  onPress={() => pickImage('label', false)}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#f3f4f6',
+                    padding: 15,
+                    borderRadius: 8,
+                    alignItems: 'center',
+                    flexDirection: 'row',
+                    justifyContent: 'center',
+                    gap: 8,
+                    borderWidth: 1,
+                    borderColor: '#0d9488',
+                  }}
                 >
-                  <View className="items-center">
-                    <Ionicons name="images" size={24} color="#059669" />
-                    <Text className="text-emerald-700 mt-1">Gallery</Text>
-                  </View>
+                  <Ionicons name="images" size={20} color="#0d9488" />
+                  <Text style={{ color: '#0d9488', fontWeight: '600' }}>Gallery</Text>
                 </TouchableOpacity>
               </View>
             )}
           </View>
 
-          {/* Scan Button */}
+          {/* Auto-Fill Button */}
           {frontImageUri && (
             <TouchableOpacity
               onPress={runOCR}
               disabled={extracting}
-              className="bg-purple-600 rounded-xl py-4 mt-4 items-center"
+              style={{
+                backgroundColor: '#8b5cf6',
+                padding: 12,
+                borderRadius: 8,
+                alignItems: 'center',
+                flexDirection: 'row',
+                justifyContent: 'center',
+                gap: 8,
+                marginTop: 10,
+              }}
             >
               {extracting ? (
-                <ActivityIndicator color="white" />
+                <ActivityIndicator color="#fff" />
               ) : (
-                <Text className="text-white font-bold">Scan & Autofill</Text>
+                <>
+                  <Ionicons name="scan" size={20} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: '600' }}>
+                    Auto-Fill with AI
+                  </Text>
+                </>
               )}
             </TouchableOpacity>
           )}
         </View>
 
-        {/* FORM */}
-        <View className="bg-white p-5 rounded-2xl shadow mb-10">
-          <Text className="font-bold mb-4">📝 Details</Text>
-
-          <TextInput
-            placeholder="Medicine Name *"
-            value={medicineName}
-            onChangeText={setMedicineName}
-            className="bg-gray-100 p-3 rounded-xl mb-3"
-          />
-
-          <TextInput
-            placeholder="Category * (e.g., Tablet, Syrup, Injection)"
-            value={category}
-            onChangeText={setCategory}
-            className="bg-gray-100 p-3 rounded-xl mb-3"
-          />
-
-          <TextInput
-            placeholder="Manufacturer *"
-            value={manufacturer}
-            onChangeText={setManufacturer}
-            className="bg-gray-100 p-3 rounded-xl mb-3"
-          />
-
-          <TextInput
-            placeholder="Batch Number *"
-            value={batchNo}
-            onChangeText={setBatchNo}
-            className="bg-gray-100 p-3 rounded-xl mb-3"
-          />
-
-          <TextInput
-            placeholder="Mfg Date (MM/YYYY)"
-            value={mfgDate}
-            onChangeText={setMfgDate}
-            className="bg-gray-100 p-3 rounded-xl mb-3"
-          />
-
-          <TextInput
-            placeholder="Expiry Date (MM/YYYY) *"
-            value={expiryDate}
-            onChangeText={setExpiryDate}
-            editable={!loading && !isScanned}
-            className={`p-3 rounded-xl mb-3 ${isScanned ? 'bg-secondary-100 text-secondary-500' : 'bg-gray-100'}`}
-          />
-
-          <TextInput
-            placeholder="MRP (₹)"
-            keyboardType="numeric"
-            value={mrp}
-            onChangeText={setMrp}
-            className="bg-gray-100 p-3 rounded-xl mb-3"
-          />
-
-          <TextInput
-            placeholder="Quantity *"
-            keyboardType="numeric"
-            value={quantity}
-            onChangeText={setQuantity}
-            className="bg-gray-100 p-3 rounded-xl mb-3"
-          />
-
-          <TextInput
-            placeholder="Description (optional)"
-            multiline
-            value={description}
-            onChangeText={setDescription}
-            className="bg-gray-100 p-3 rounded-xl mb-3"
-          />
-
-          {/* Submit */}
-          <TouchableOpacity
-            onPress={uploadToFirebase}
-            disabled={loading}
-            className="bg-primary-600 rounded-xl py-4 items-center shadow-lg shadow-primary-500/30"
-          >
-            {loading ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text className="text-white font-bold text-lg">Submit Donation</Text>
+        {/* Extracted Data Display */}
+        {extractedData && (
+          <View style={{
+            backgroundColor: '#f0fdf4',
+            borderRadius: 8,
+            padding: 15,
+            marginBottom: 20,
+            borderWidth: 1,
+            borderColor: '#86efac',
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+              <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+              <Text style={{ fontSize: 16, fontWeight: 'bold', marginLeft: 8, color: '#065f46' }}>
+                AI Extracted Labels
+              </Text>
+            </View>
+            {extractedData.name && (
+              <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+                <Text style={{ color: '#6b7280', width: 100 }}>Name:</Text>
+                <Text style={{ color: '#374151', flex: 1 }}>{extractedData.name}</Text>
+              </View>
             )}
-          </TouchableOpacity>
-        </View>
+            {extractedData.type && (
+              <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+                <Text style={{ color: '#6b7280', width: 100 }}>Type:</Text>
+                <Text style={{ color: '#374151', flex: 1 }}>{extractedData.type}</Text>
+              </View>
+            )}
+            {extractedData.manufacturer && (
+              <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+                <Text style={{ color: '#6b7280', width: 100 }}>Manufacturer:</Text>
+                <Text style={{ color: '#374151', flex: 1 }}>{extractedData.manufacturer}</Text>
+              </View>
+            )}
+            {extractedData.batchNo && (
+              <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+                <Text style={{ color: '#6b7280', width: 100 }}>Batch No:</Text>
+                <Text style={{ color: '#374151', flex: 1 }}>{extractedData.batchNo}</Text>
+              </View>
+            )}
+            {extractedData.mfdDate && (
+              <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+                <Text style={{ color: '#6b7280', width: 100 }}>Mfg Date:</Text>
+                <Text style={{ color: '#374151', flex: 1 }}>{extractedData.mfdDate}</Text>
+              </View>
+            )}
+            {extractedData.expiryDate && (
+              <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+                <Text style={{ color: '#6b7280', width: 100 }}>Expiry:</Text>
+                <Text style={{ color: '#374151', flex: 1 }}>{extractedData.expiryDate}</Text>
+              </View>
+            )}
+            {extractedData.mrp && (
+              <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+                <Text style={{ color: '#6b7280', width: 100 }}>MRP:</Text>
+                <Text style={{ color: '#374151', flex: 1 }}>₹{extractedData.mrp}</Text>
+              </View>
+            )}
+          </View>
+        )}
 
+        <TextInput
+          placeholder="Medicine Name *"
+          value={medicineName}
+          onChangeText={setMedicineName}
+          style={{ backgroundColor: "#eee", padding: 12, marginBottom: 10 }}
+        />
+
+        <TextInput
+          placeholder="Category *"
+          value={category}
+          onChangeText={setCategory}
+          style={{ backgroundColor: "#eee", padding: 12, marginBottom: 10 }}
+        />
+
+        <TextInput
+          placeholder="Manufacturer *"
+          value={manufacturer}
+          onChangeText={setManufacturer}
+          style={{ backgroundColor: "#eee", padding: 12, marginBottom: 10 }}
+        />
+
+        <TextInput
+          placeholder="Batch Number *"
+          value={batchNo}
+          onChangeText={setBatchNo}
+          style={{ backgroundColor: "#eee", padding: 12, marginBottom: 10 }}
+        />
+
+        <TextInput
+          placeholder="Expiry Date (MM/YYYY) *"
+          value={expiryDate}
+          onChangeText={setExpiryDate}
+          style={{ backgroundColor: "#eee", padding: 12, marginBottom: 10 }}
+        />
+
+        <TextInput
+          placeholder="Quantity *"
+          value={quantity}
+          onChangeText={setQuantity}
+          keyboardType="numeric"
+          style={{ backgroundColor: "#eee", padding: 12, marginBottom: 10 }}
+        />
+
+        <TouchableOpacity
+          onPress={uploadToFirebase}
+          disabled={loading}
+          style={{
+            backgroundColor: "#0d9488",
+            padding: 15,
+            alignItems: "center",
+            marginTop: 20,
+          }}
+        >
+          {loading ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text style={{ color: "white", fontWeight: "bold" }}>
+              Submit Donation
+            </Text>
+          )}
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );

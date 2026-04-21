@@ -37,3 +37,11 @@ export const subscribeToMessages = (chatRoomId: string, callback: (messages: any
         callback(messages);
     });
 };
+export const subscribeToChatRoom = (chatRoomId: string, callback: (data: any) => void) => {
+    const chatRef = doc(db, 'chatRooms', chatRoomId);
+    return onSnapshot(chatRef, (snapshot) => {
+        if (snapshot.exists()) {
+            callback({ id: snapshot.id, ...snapshot.data() });
+        }
+    });
+};

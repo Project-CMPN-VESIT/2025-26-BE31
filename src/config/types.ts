@@ -50,6 +50,10 @@ export const DonationSchema = z.object({
   geo: LocationSchema.optional(),
   matchedNgoId: z.string().optional(),
   matchedNgoName: z.string().optional(),
+  reservedByNgoId: z.string().optional(),
+  reservedByNgoName: z.string().optional(),
+  chatRoomId: z.string().optional(),
+  completedAt: z.instanceof(Timestamp).optional(),
 });
 export type Donation = z.infer<typeof DonationSchema>;
 
@@ -247,6 +251,14 @@ export type HomeStackParamList = {
   VedAI: undefined;
   Connection: { matchId: string };
   MedicineDetails: { medicineId: string };
+  ChatScreen: { chatRoomId: string; donationId: string };
+  ImpactCertificate: {
+    donorName: string;
+    medicineName: string;
+    ngoName: string;
+    quantity: number;
+    completedAt: string;
+  };
 };
 
 // Medicine types

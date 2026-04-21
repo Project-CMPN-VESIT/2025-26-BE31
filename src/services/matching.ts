@@ -25,8 +25,8 @@ export const calculateMatchScore = (
   let score = 0;
 
   // Medicine name match (40 points)
-  const donationName = donation.name.toLowerCase();
-  const requestName = request.medicineName.toLowerCase();
+  const donationName = donation.title.toLowerCase();
+  const requestName = request.title.toLowerCase();
   if (donationName === requestName) {
     score += 40;
   } else if (donationName.includes(requestName) || requestName.includes(donationName)) {
@@ -34,10 +34,10 @@ export const calculateMatchScore = (
   }
 
   // Quantity match (20 points)
-  if (donation.quantity >= request.quantity) {
+  if (donation.quantity >= request.quantityNeeded) {
     score += 20;
   } else {
-    score += (donation.quantity / request.quantity) * 20;
+    score += (donation.quantity / request.quantityNeeded) * 20;
   }
 
   // Distance (20 points) - closer is better

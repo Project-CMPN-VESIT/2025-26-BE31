@@ -125,11 +125,10 @@ export const searchDonations = async (searchTerm: string): Promise<Donation[]> =
   );
   const querySnapshot = await getDocs(q);
   const donations = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Donation));
-  
+
   // Client-side filtering
   return donations.filter(donation =>
-    donation.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    donation.manufacturer.toLowerCase().includes(searchTerm.toLowerCase())
+    (donation.title || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 };
 
@@ -190,4 +189,16 @@ export const uploadDonation = async (donationData: {
     console.error('❌ Donation upload failed:', error);
     throw new Error(`Upload failed: ${error.message || 'Unknown error'}`);
   }
+};
+/**
+ * Reserve a donation (NGO)
+ */
+export const reserveDonation = async (donationId: string, ngoId: string, ngoName: string) => {
+  const donationRef = doc(db, 'donations', donationId);
+  await updateDoc(donationRef, {
+    status: 'reserved' as DonationStatus,
+    reservedByNgoId: ngoId,
+    reservedByNgoName: ngoName,
+    updatedAt: Timestamp.now(),
+  });
 };

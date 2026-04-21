@@ -28,30 +28,37 @@ import MapScreen from '../screens/common/MapScreen';
 import DonationDetailsScreen from '../screens/common/DonationDetailsScreen';
 import RequestDetailsScreen from '../screens/common/RequestDetailsScreen';
 import ChatScreen from '../screens/common/ChatScreen';
+import ImpactCertificateScreen from '../screens/common/ImpactCertificateScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+
+/**
+ * HomeScreenWrapper Component
+ * Returns the appropriate home screen based on user role
+ */
+function HomeScreenWrapper({ navigation }: any) {
+  const { user } = useAuth();
+
+  if (user?.role === 'admin') {
+    return <AdminHomeScreen navigation={navigation} />;
+  }
+  if (user?.role === 'ngo') {
+    return <ReceiverHomeScreen navigation={navigation} />;
+  }
+  return <DonorHomeScreen navigation={navigation} />;
+}
 
 /**
  * HomeStack Navigator
  * Stack navigator for home and related screens
  */
 function HomeStack() {
-  const { user } = useAuth();
-
-  // Determine which home screen to show based on role
-  const HomeScreen =
-    user?.role === 'admin'
-      ? AdminHomeScreen
-      : user?.role === 'ngo'
-        ? ReceiverHomeScreen
-        : DonorHomeScreen;
-
   return (
     <Stack.Navigator>
       <Stack.Screen
         name="HomeScreen"
-        component={HomeScreen}
+        component={HomeScreenWrapper}
         options={{ headerShown: false }}
       />
       <Stack.Screen
@@ -112,6 +119,11 @@ function HomeStack() {
       <Stack.Screen
         name="ChatScreen"
         component={ChatScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="ImpactCertificate"
+        component={ImpactCertificateScreen}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>

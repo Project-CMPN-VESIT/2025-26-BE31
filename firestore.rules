@@ -48,7 +48,18 @@ service cloud.firestore {
     match /donations/{donationId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.donorId == request.auth.uid;
-      allow update, delete: if isSignedIn() && resource.data.donorId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        // Owner can update everything
+        resource.data.donorId == request.auth.uid ||
+        // NGO can reserve a donation
+        (request.resource.data.status == 'reserved' && 
+         request.resource.data.reservedByNgoId == request.auth.uid &&
+         resource.data.status == 'available') ||
+        // NGO can revert their own reservation
+        (request.resource.data.status == 'available' && 
+         resource.data.reservedByNgoId == request.auth.uid)
+      );
+      allow delete: if isSignedIn() && resource.data.donorId == request.auth.uid;
     }
 
     match /requests/{requestId} {
@@ -63,6 +74,18 @@ service cloud.firestore {
         (request.auth.uid == resource.data.donorId || request.auth.uid == resource.data.ngoId);
       allow create: if isSignedIn(); // Add backend function constraints ideally
       allow delete: if false;
+    }
+
+    // ---------- Notifications Collection ----------
+    
+    match /notifications/{userId} {
+      allow read: if isOwner(userId);
+      
+      match /items/{notificationId} {
+        allow read, update, delete: if isOwner(userId);
+        // Anyone can create a notification for another user
+        allow create: if isSignedIn();
+      }
     }
 
     // ---------- Chat Rooms Collection ----------

@@ -223,7 +223,7 @@ export default function RequestDetailsScreen({ route, navigation }: any) {
               <View className="flex-row items-start justify-between mb-4">
                 <View className="flex-1 mr-4">
                   <Text className="text-2xl font-bold text-secondary-900 mb-1">
-                    {request.medicineName}
+                    {request.title}
                   </Text>
                   <Text className="text-secondary-500 font-medium">
                     Requested on {request.createdAt?.toDate?.()?.toLocaleDateString() || 'Unknown'}
@@ -242,7 +242,7 @@ export default function RequestDetailsScreen({ route, navigation }: any) {
                 <View className="w-1/2 mb-4 pr-2">
                   <Text className="text-xs text-secondary-400 font-bold uppercase tracking-wider mb-1">Quantity Needed</Text>
                   <Text className="text-xl text-secondary-900 font-bold">
-                    {request.quantity} <Text className="text-sm font-medium text-secondary-500">units</Text>
+                    {request.quantityNeeded} <Text className="text-sm font-medium text-secondary-500">units</Text>
                   </Text>
                 </View>
                 <View className="w-1/2 mb-4 pl-2">
